@@ -1,0 +1,46 @@
+#!/bin/bash
+set -e
+
+BUILD_DIR=build_ninja
+INSTALL_DIR=install
+
+if ! command -v ninja &> /dev/null; then
+  echo "ninja 未安装，尝试通过 brew 安装..."
+  brew install ninja
+fi
+
+if brew list llvm &> /dev/null; then
+  LLVM_PREFIX=$(brew --prefix llvm)
+  export CC="$LLVM_PREFIX/bin/clang"
+  export CXX="$LLVM_PREFIX/bin/clang++"
+  export PATH="$LLVM_PREFIX/bin:$PATH"
+  echo "使用 Homebrew llvm 编译器: $CC"
+else
+  echo "未检测到 Homebrew llvm，使用系统默认 clang"
+  export CC=clang
+  export CXX=clang++
+fi
+
+rm -rf "$BUILD_DIR"
+mkdir "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+cmake \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="../install" \
+  -DLLVM_ENABLE_PROJECTS="clang;lld;lldb" \
+  -DLLVM_ENABLE_RUNTIMES="libcxx" \
+  -DLLDB_ENABLE_DEBUGSERVER=OFF \
+  -DLLVM_INCLUDE_TESTS=OFF \
+  -DLLVM_INCLUDE_EXAMPLES=OFF \
+  -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
+  ../llvm
+
+
+# 使用所有 CPU 核心并行编译
+ninja -j$(sysctl -n hw.ncpu)
+
+ninja install -j$(sysctl -n hw.ncpu)
+
+echo "构建完成，安装目录：$(pwd)/../$INSTALL_DIR"
